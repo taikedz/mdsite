@@ -1,5 +1,21 @@
 #!/bin/bash
 
+# Markdown Site - a tool for building web sites in Markdown
+# Copyright (C) 2017 Tai Kedzierski
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 ### Markdown Site Generator Usage:help
 #
 # Tool for generating websites from markdown
@@ -14,40 +30,40 @@
 
 #%include autohelp bashout
 
-# TODO
-# allow using settings for a conf in local directory
-
 set -u
 
 if [[ -z "${WEBDIR+x}" ]]; then
 	WEBDIR=./web.d/
 fi
 
-if [[ -z "${CSSDIR+x}" ]]; then
-	CSSDIR="$WEBDIR"
+if [[ -z "${CSSFILE+x}" ]]; then
+	CSSFILE="./markdown.css"
 fi
+
+# TODO
+# allow using settings for a conf in local directory
+#%include src/loadlocalconf.sh
 
 mkdir -p "$WEBDIR"
 
 infoe "Writing to $WEBDIR ..."
 
-# TODO
-# get basename of file
+for SRCFILE in "$@"; do
+	if [[ ! "$SRCFILE" =~ $(echo ".md$") ]]; then
+		warne "$SRCFILE is not a Markdown file ?"
+		continue
+	fi
+	bfname="$(basename "$SRCFILE"|sed 's/\.md$/.html/')"
+	tdir="$(dirname "$SRCFILE")"
+	tfile="$WEBDIR/$tdir/$bfname"
 
-ALLFILES=
-for x in "$@"; do
-	tfile=$(mktemp -p ./ .previewXXXX.html)
-	ALLFILES="$ALLFILES $tfile"
-	if [[ "$HOME/.markdown.css" ]]; then
+	mkdir -p "$WEBDIR/$tdir"
+
+	if [[ -f "$CSSFILE" ]]; then
+		infoe "Adding CSS from $CSSFILE"
 		echo '<style>' > "$tfile"
-		cat "$HOME/.markdown.css"  >> "$tfile"
+		cat "$CSSFILE"  >> "$tfile"
 		echo '</style>' >> "$tfile"
 	fi
-	markdown "$x" >> "$tfile"
-	# TODO
-	# move to target dir using the basename
-	sensible-browser $tfile 2>/dev/null >/dev/null
+	markdown "$SRCFILE" >> "$tfile"
 done
-
-sleep 2
-rm $ALLFILES
