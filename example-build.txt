@@ -1,0 +1,9 @@
+# This is an example of a build file in the target format
+# the SLUG is the placeholder name to use in MD files to create links
+# the TGTFILEPATH is the path of the file in the target output directory
+# the MDFILES ... is a space-separated list of Markdown files to compiled in
+#   to the HTML file, in the order in which they should appear
+
+# SLUG	TGTFILEPATH	MDFILES ...
+HOME	index.html	intro.md help.md
+
