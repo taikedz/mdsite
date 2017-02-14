@@ -1,0 +1,202 @@
+#!/bin/bash
+
+# Markdown Site - a tool for building web sites in Markdown
+# Copyright (C) 2017 Tai Kedzierski
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+### Markdown Site Generator Usage:help
+#
+# Tool for generating websites from markdown
+#
+# ENVIRONMENT VARIABLES
+#
+# Set the CSSDIR property to point to a directory where CSS should be pulled from
+#
+# Set the MDWEBDIR property to point to a directory to serve as th root of the site
+#
+###/doc
+
+#!/bin/bash
+
+### printhelp Usage:bbuild
+# Write your help as documentation comments in your script
+#
+# If you need to output the help from a running script, call the
+# `printhelp` function and it will print the help documentation
+# in the current script to stdout
+#
+# A help comment looks like this:
+#
+#	### <title> Usage:help
+#	#
+#	# <some content>
+#	#
+#	# end with "###/doc" on its own line (whitespaces before
+#	# and after are OK)
+#	#
+#	###/doc
+#
+###/doc
+
+CHAR='#'
+
+function printhelp {
+	USAGESTRING=help
+	TARGETFILE=$0
+	if [[ -n "$*" ]]; then USAGESTRING="$1" ; shift; fi
+	if [[ -n "$*" ]]; then TARGETFILE="$1" ; shift; fi
+
+        echo -e "\n$(basename "$TARGETFILE")\n===\n"
+        local SECSTART='^\s*'"$CHAR$CHAR$CHAR"'\s+(.+?)\s+Usage:'"$USAGESTRING"'\s*$'
+        local SECEND='^\s*'"$CHAR$CHAR$CHAR"'\s*/doc\s*$'
+        local insec="$(mktemp --tmpdir)"; rm "$insec"
+        cat "$TARGETFILE" | while read secline; do
+                if [[ "$secline" =~ $SECSTART ]]; then
+                        touch "$insec"
+                        echo -e "${BASH_REMATCH[1]}\n---\n"
+                elif [[ -f $insec ]]; then
+                        if [[ "$secline" =~ $SECEND ]]; then
+                                rm "$insec"
+                        else
+				echo "$secline" | sed -r "s/^\s*$CHAR//g"
+                        fi
+                fi
+        done
+        if [[ -f "$insec" ]]; then
+                echo "WARNING: Non-terminated help block." 1>&2
+		rm "$insec"
+        fi
+	echo ""
+}
+
+### automatic help Usage:bbuild
+#
+# automatically call help if "--help" is detected in arguments
+#
+###/doc
+if [[ "$@" =~ --help ]]; then
+	printhelp
+	exit 0
+fi
+#!/bin/bash
+
+#!/bin/bash
+
+export CDEF="[0m"
+export CRED="[31m"
+export CGRN="[32m"
+export CYEL="[33m"
+export CBLU="[34m"
+export CBRED="[1;31m"
+export CBGRN="[1;32m"
+export CBYEL="[1;33m"
+export CBBLU="[1;34m"
+
+MODE_DEBUG=no
+
+### debuge MESSAGE Usage:bbuild
+# print a blue debug message to stderr
+# only prints if MODE_DEBUG is set to "yes"
+###/doc
+function debuge {
+	if [[ "$MODE_DEBUG" = yes ]]; then
+		echo -e "${CBBLU}DEBUG:$CBLU$*$CDEF" 1>&2
+	fi
+}
+
+### infoe MESSAGE Usage:bbuild
+# print a green informational message to stderr
+###/doc
+function infoe {
+	echo -e "$CGRN$*$CDEF" 1>&2
+}
+
+### warne MESSAGE Usage:bbuild
+# print a yellow warning message to stderr
+###/doc
+function warne {
+	echo -e "${CBYEL}WARN:$CYEL $*$CDEF" 1>&2
+}
+
+### faile MESSAGE CODE Usage:bbuild
+# print a red failure message to stderr and exit with CODE
+# CODE must be a number
+# if no code is specified, error code 127 is used
+###/doc
+function faile {
+	local MSG=
+	local ARG=
+	local ERCODE=127
+	local numpat='^[0-9]+$'
+	while [[ -n "$*" ]]; do
+		ARG=$1 ; shift
+		if [[ -z "$*" ]] && [[ "$ARG" =~ $numpat ]]; then
+			ERCODE=$ARG
+		else
+			MSG="$MSG $ARG"
+		fi
+	done
+	echo "${CBRED}ERROR FAIL:$CRED$MSG$CDEF" 1>&2
+	exit "$ERCODE"
+}
+
+function dumpe {
+	echo -n "[1;35m$*" 1>&2
+	echo -n "[0;35m" 1>&2
+	cat - 1>&2
+	echo -n "[0m" 1>&2
+}
+
+if [[ "$*" =~ --debug ]]; then
+	MODE_DEBUG=yes
+fi
+
+set -u
+
+if [[ -z "${WEBDIR+x}" ]]; then
+	WEBDIR=./web.d/
+fi
+
+if [[ -z "${CSSFILE+x}" ]]; then
+	CSSFILE="./markdown.css"
+fi
+
+# TODO
+# allow using settings for a conf in local directory
+echo OK
+
+mkdir -p "$WEBDIR"
+
+infoe "Writing to $WEBDIR ..."
+
+for SRCFILE in "$@"; do
+	if [[ ! "$SRCFILE" =~ $(echo ".md$") ]]; then
+		warne "$SRCFILE is not a Markdown file ?"
+		continue
+	fi
+	bfname="$(basename "$SRCFILE"|sed 's/\.md$/.html/')"
+	tdir="$(dirname "$SRCFILE")"
+	tfile="$WEBDIR/$tdir/$bfname"
+
+	mkdir -p "$WEBDIR/$tdir"
+
+	if [[ -f "$CSSFILE" ]]; then
+		infoe "Adding CSS from $CSSFILE"
+		echo '<style>' > "$tfile"
+		cat "$CSSFILE"  >> "$tfile"
+		echo '</style>' >> "$tfile"
+	fi
+	markdown "$SRCFILE" >> "$tfile"
+done
