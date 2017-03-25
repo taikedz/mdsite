@@ -1,69 +1,114 @@
 #!/bin/bash
 
-# Markdown Site - a tool for building web sites in Markdown
-# Copyright (C) 2017 Tai Kedzierski
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-### Markdown Site Generator Usage:help
+### Preview a markdown file Usage:help
 #
-# Tool for generating websites from markdown
+# USAGE
+# =====
+#
+# 	mdpreview FILEA.md FILEB.md ... [ --styles ]
+#
+# Supply styles in ./styles.css , or see the CSSFILES environment variable definition below.
+#
+# Use the "--styles" option to display what style files will actually be used, without generating any content.
 #
 # ENVIRONMENT VARIABLES
+# =====================
 #
-# Set the CSSDIR property to point to a directory where CSS should be pulled from
+# MDEXEC - path to executable markdown processor. By default searches for `markdown_py` of `markdown`
+#   Can be overridden by setting the environment variable.
+#   If no markdown processor is supplied or is located, then mdpreview will fail.
 #
-# Set the MDWEBDIR property to point to a directory to serve as th root of the site
+# BREXEC - searches for a valid browser; by default tries to locate in order
+#   sensible-browser, firefox, chromium-browser, elinks
+#   Can be overridden by setting the environment variable.
+#   If no suitable browser is found or supplied, then the preview files are listed instead of being subsequently removed.
+#   You can set
 #
+#       BREXEC=
+#
+#   to force no-previewing (useful with DEST)
+#
+# CSSFILES - by default is set to /etc/mdpreview/styles.css:$HOME/.config/mdpreview/styles.css:./styles.css
+#   Can be overridden by setting the environment variable.
+#
+#
+# DEST - optional ; if not set, temp files are generated, and are removed after being previewed.
+#   If set, files are output to this directory, opened for preview, but not removed.
 ###/doc
 
-#%include autohelp bashout
+#%include getbin bashout readargs kvreader autohelp
+#%include src/addhf src/addincludes src/addstyles
 
 set -u
 
-if [[ -z "${WEBDIR+x}" ]]; then
-	WEBDIR=./web.d/
+if [[ -z "${MDEXEC+x}" ]]; then
+	MDEXEC=$(getbin markdown_py markdown)
+fi
+debuge "MDEXEC=$MDEXEC"
+
+if [[ -z "${BREXEC+x}" ]]; then
+	BREXEC=$(getbin sensible-browser firefox chromium-browser elinks)
+fi
+debuge "BREXEC=$BREXEC"
+
+if [[ -z "${CSSFILES+x}" ]]; then
+	CSSFILES="/etc/mdpreview/styles.css:$HOME/.config/mdpreview/styles.css:./styles.css"
+fi
+debuge "CSSFILES=$CSSFILES"
+
+if [[ -z "$MDEXEC" ]] || [[ ! -f "$MDEXEC" ]]; then
+	faile "No markdown processor"
 fi
 
-if [[ -z "${CSSFILE+x}" ]]; then
-	CSSFILE="./markdown.css"
+if [[ -z "${DEST+x}" ]]; then
+	DEST="./"
+fi
+debuge "DEST=$DEST"
+
+if [[ ! -d "$DEST" ]]; then
+	faile "Invalid destination folder [$DEST]"
 fi
 
-# TODO
-# allow using settings for a conf in local directory
-#%include src/loadlocalconf.sh
+if [[ "$*" =~ --styles ]]; then
+	findstyles
+	exit
+fi
 
-mkdir -p "$WEBDIR"
-
-infoe "Writing to $WEBDIR ..."
-
-for SRCFILE in "$@"; do
-	if [[ ! "$SRCFILE" =~ $(echo ".md$") ]]; then
-		warne "$SRCFILE is not a Markdown file ?"
+ALLFILES=
+for mdfile in "$@"; do
+	if [[ "$mdfile" =~ $(echo "--debug|--styles") ]]; then
 		continue
 	fi
-	bfname="$(basename "$SRCFILE"|sed 's/\.md$/.html/')"
-	tdir="$(dirname "$SRCFILE")"
-	tfile="$WEBDIR/$tdir/$bfname"
-
-	mkdir -p "$WEBDIR/$tdir"
-
-	if [[ -f "$CSSFILE" ]]; then
-		infoe "Adding CSS from $CSSFILE"
-		echo '<style>' > "$tfile"
-		cat "$CSSFILE"  >> "$tfile"
-		echo '</style>' >> "$tfile"
+	# ----
+	
+	if [[ -z "$DEST" ]]; then
+		tfile=$(mktemp "./.previewXXXX.html")
+	else
+		tfile="$DEST/$(basename "$mdfile").html"
 	fi
-	markdown "$SRCFILE" >> "$tfile"
+	ALLFILES="$ALLFILES $tfile"
+
+	addheaders "$tfile"
+	addstyles "$tfile"
+	addbodyheaders "$tfile"
+
+	debuge "Run $MDEXEC $mdfile >> $tfile"
+	"$MDEXEC" "$mdfile" >> "$tfile"
+
+	addbodyfooters "$tfile"
+	addfooters "$tfile"
+	
+	processinserts "$tfile"
+
+	if [[ -n "$BREXEC" ]]; then
+		"$BREXEC" $tfile 2>/dev/null >/dev/null &
+	fi
 done
+
+if [[ -z "$BREXEC" ]] || [[ -n "$DEST" ]]; then
+	infoe "Wrote $ALLFILES"
+else
+	sleep 2
+	debuge "Removing $ALLFILES"
+	rm $ALLFILES
+fi
